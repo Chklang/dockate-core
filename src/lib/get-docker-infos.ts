@@ -1,6 +1,6 @@
 import * as Fetch from "node-fetch";
 import * as ssh from "node-ssh";
-import { Configuration } from 'dockerproxy-commons';
+import { Configuration } from '@dockate/commons';
 import { textToObject } from "./console-to-object";
 
 export class DockerAPI {

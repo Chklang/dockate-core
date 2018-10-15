@@ -1,6 +1,6 @@
 import * as fs from "fs-extra";
 import { LoadWebservice } from './load-web-service';
-import { IService, INodeWithServices, Configuration } from 'dockerproxy-commons';
+import { IService, INodeWithServices, Configuration } from '@dockate/commons';
 import { Scheduler } from './scheduler';
 
 const nodesWithService: INodeWithServices[] = [];

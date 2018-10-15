@@ -1,4 +1,4 @@
-import { IGlobalDB, IWebService, IService, INodeWithServices, Configuration } from 'dockerproxy-commons';
+import { IGlobalDB, IWebService, IService, INodeWithServices, Configuration } from '@dockate/commons';
 import { ILogger, LoggerFactory } from '@log4js-universal/logger';
 import { Dictionnary } from 'arrayplus';
 import { DockerAPI, IServiceInfos } from './get-docker-infos';

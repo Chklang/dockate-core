@@ -1,7 +1,7 @@
 import * as http from "http";
 import * as https from "https";
 import * as fs from "fs-extra";
-import { IWebService, Configuration } from 'dockerproxy-commons';
+import { IWebService, Configuration } from '@dockate/commons';
 
 export class LoadWebservice {
     public static load(webServiceScript: string): Promise<IWebService> {
