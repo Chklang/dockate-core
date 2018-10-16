@@ -34,9 +34,9 @@ export class DockerAPI {
                     const connection = new ssh.default();
                     connection.connect({
                         host: config.swarmHost,
-                        password: config.swarmUsername,
+                        username: config.swarmUsername,
                         port: config.swarmPortSSH,
-                        username: config.swarmPassword,
+                        password: config.swarmPassword,
                     }).then(() => {
                         resolve(connection);
                     }, (e) => {
