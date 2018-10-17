@@ -4,7 +4,7 @@ import { Dictionnary } from 'arrayplus';
 import { DockerAPI, IServiceInfos } from './get-docker-infos';
 
 export class Scheduler {
-    private static LOGGER: ILogger = LoggerFactory.getLogger("dockerproxy.Scheduler");
+    private static LOGGER: ILogger = LoggerFactory.getLogger("dockate-core.Scheduler");
     private lastDbCalculed: IGlobalDB = null;
     private api: DockerAPI = new DockerAPI();
 

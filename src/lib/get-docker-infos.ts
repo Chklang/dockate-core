@@ -5,7 +5,7 @@ import { textToObject } from "./console-to-object";
 import { ILogger, LoggerFactory } from '@log4js-universal/logger';
 
 export class DockerAPI {
-    private static LOGGER: ILogger = LoggerFactory.getLogger("dockerproxy.DockerAPI");
+    private static LOGGER: ILogger = LoggerFactory.getLogger("dockate-core.DockerAPI");
     private sshInstance: Promise<ssh.default> = null;
 
     public stop(): Promise<void> {
@@ -42,9 +42,9 @@ export class DockerAPI {
                     const connection = new ssh.default();
                     connection.connect({
                         host: config.swarmHost,
-                        password: config.swarmUsername,
+                        username: config.swarmUsername,
                         port: config.swarmPortSSH,
-                        username: config.swarmPassword,
+                        password: config.swarmPassword,
                     }).then(() => {
                         resolve(connection);
                     }, (e) => {
