@@ -40,7 +40,7 @@ export class Scheduler {
         return this.api.getServices().then((services) => {
             let servicesFound: number = 0;
             const hasSomeServicesDifferents: boolean = services.some((service) => {
-                if (!service.Spec.Labels['traefik.port']) {
+                if (!service.Spec.Labels['dockate.port']) {
                     // Ignore this service
                     return false;
                 }
