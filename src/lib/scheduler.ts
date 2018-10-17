@@ -15,6 +15,7 @@ export class Scheduler {
     }
 
     public start() {
+        Scheduler.LOGGER.debug("Scheduler started");
         Configuration.INSTANCE.getConfig().then((config) => {
             const intervalBetweenCheckServices = config.intervalBetweenCheckServices;
             const callbackRun = () => {
@@ -23,9 +24,13 @@ export class Scheduler {
                     console.error(e);
                     this.lastDbCalculed = null;
                 }).then(() => {
-                    setTimeout(() => {
-                        callbackRun();
-                    }, intervalBetweenCheckServices);
+                    if (intervalBetweenCheckServices > 0) {
+                        setTimeout(() => {
+                            callbackRun();
+                        }, intervalBetweenCheckServices);
+                    } else {
+                        Scheduler.LOGGER.debug("Scheduler ended because config.intervalBetweenCheckServices is <= 0 : %1", intervalBetweenCheckServices);
+                    }
                 });
             }
             callbackRun();
@@ -40,10 +45,12 @@ export class Scheduler {
         return this.api.getServices().then((services) => {
             let servicesFound: number = 0;
             const hasSomeServicesDifferents: boolean = services.some((service) => {
-                if (!service.Spec.Labels['dockate.port']) {
+                if (!service.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']) {
+                    Scheduler.LOGGER.debug("Ignore service %1 because no dockate.port detected on labels", service.Spec.Name);
                     // Ignore this service
                     return false;
                 }
+                Scheduler.LOGGER.debug("Service %1 detected with the internal port %2", service.Spec.Name, service.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']);
                 servicesFound++;
                 const serviceFromDb = this.lastDbCalculed.services.getElement(service.Spec.Name)
                 if (!serviceFromDb) {
@@ -67,7 +74,7 @@ export class Scheduler {
             }
             if (this.lastDbCalculed.services.length !== servicesFound) {
                 // Nb services !==
-                Scheduler.LOGGER.debug("UPDATE > because service.length from db is", this.lastDbCalculed.services.length, " and from api is", servicesFound);
+                Scheduler.LOGGER.debug("UPDATE > because service.length from db is %1 and from api is %2", this.lastDbCalculed.services.length, servicesFound);
                 return true;
             }
             return false;
@@ -128,8 +135,8 @@ export class Scheduler {
                                 serviceFromDB.Endpoint.VirtualIPs.forEach((virtualIp) => {
                                     service.virtualIPs.addElement(virtualIp.Addr, virtualIp.Addr);
                                 });
-                                if (serviceFromDB.Spec.Labels['dockate.port']) {
-                                    const internalPortNumber: number = Number(serviceFromDB.Spec.Labels['dockate.port']);
+                                if (serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']) {
+                                    const internalPortNumber: number = Number(serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']);
                                     const externalPort = serviceFromDB.Endpoint.Ports.find((entry) => {
                                         if (entry.TargetPort === internalPortNumber) {
                                             return true;
@@ -139,19 +146,23 @@ export class Scheduler {
                                     if (externalPort) {
                                         service.PORT[internalPortNumber] = externalPort.PublishedPort;
                                         servicesAll.addElement(serviceFromDB.Spec.Name, service);
-                                        const domainsString: string = serviceFromDB.Spec.Labels['dockate.domains'];
+                                        const domainsString: string = serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockate.domains'];
                                         if (domainsString) {
                                             service.domains = domainsString.split(',');
+                                            Scheduler.LOGGER.debug("Service %1 has the domain list %2", serviceFromDB.Spec.Name, service.domains);
                                         }
-                                        const pathsString: string = serviceFromDB.Spec.Labels['dockage.paths'];
+                                        const pathsString: string = serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockage.paths'];
                                         if (pathsString) {
                                             service.paths = pathsString.split(',');
+                                            Scheduler.LOGGER.debug("Service %1 has the paths list %2", serviceFromDB.Spec.Name, service.paths);
                                         }
-                                        const authentString: string = serviceFromDB.Spec.Labels['dockage.authents'];
+                                        const authentString: string = serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockage.authents'];
                                         if (authentString) {
                                             service.authent = authentString.split(',');
+                                            Scheduler.LOGGER.debug("Service %1 has the authent list %2", serviceFromDB.Spec.Name, service.authent);
                                         }
                                     } else {
+                                        Scheduler.LOGGER.debug("Service %1 ignored because no external port found", serviceFromDB.Spec.Name);
                                         service = null;
                                     }
                                 } else {

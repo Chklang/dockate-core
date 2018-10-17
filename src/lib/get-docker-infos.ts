@@ -2,8 +2,10 @@ import * as Fetch from "node-fetch";
 import * as ssh from "node-ssh";
 import { Configuration } from '@dockate/commons';
 import { textToObject } from "./console-to-object";
+import { ILogger, LoggerFactory } from '@log4js-universal/logger';
 
 export class DockerAPI {
+    private static LOGGER: ILogger = LoggerFactory.getLogger("dockerproxy.DockerAPI");
     private sshInstance: Promise<ssh.default> = null;
 
     public stop(): Promise<void> {
@@ -18,12 +20,18 @@ export class DockerAPI {
     public getNodes(): Promise<INodeInfos[]> {
         return this.request("/nodes").then((response) => {
             return response.json();
+        }).then((results) => {
+            DockerAPI.LOGGER.debug("Response from /nodes : %1", results);
+            return results;
         });
     }
 
     public getServices(): Promise<IServiceInfos[]> {
         return this.request("/services").then((response) => {
             return response.json();
+        }).then((results) => {
+            DockerAPI.LOGGER.debug("Response from /services : %1", results);
+            return results;
         });
     }
 
@@ -34,9 +42,9 @@ export class DockerAPI {
                     const connection = new ssh.default();
                     connection.connect({
                         host: config.swarmHost,
-                        username: config.swarmUsername,
+                        password: config.swarmUsername,
                         port: config.swarmPortSSH,
-                        password: config.swarmPassword,
+                        username: config.swarmPassword,
                     }).then(() => {
                         resolve(connection);
                     }, (e) => {
@@ -52,6 +60,9 @@ export class DockerAPI {
                 });
             }).then((output: string) => {
                 return textToObject<INodePsEntry>(["ID", "NAME", "IMAGE", "NODE", "DESIRED STATE", "CURRENT STATE", "ERROR", "PORTS"], output)
+            }).then((results) => {
+                DockerAPI.LOGGER.debug("Response from 'docker node ps' : %1", results);
+                return results;
             });
         } catch (e) {
             return Promise.reject(e);
