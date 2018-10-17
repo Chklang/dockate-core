@@ -1,12 +1,12 @@
 {
   "name": "@dockate/core",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "",
   "main": "index.js",
   "scripts": {
     "dist": "npm run build && copyfiles package.json README.md .npmrc dist/",
     "lint": "tslint -c tslint.json \"src/**/*.ts\"",
-    "build": "node_modules/typescript/bin/tsc",
+    "build": "node node_modules/typescript/bin/tsc",
     "clean_dist": "rm -Rf dist",
     "publish_to_npm": "cd dist && npm publish",
     "set_version": "node node_modules/produce-version",
@@ -15,9 +15,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@dockate/commons": "^1.0.0",
-    "@log4js-universal/logger": "^1.0.2",
-    "arrayplus": "^1.0.1",
+    "@dockate/commons": "^1.0.1",
+    "@log4js-universal/logger": "^1.0.3",
+    "arrayplus": "^1.0.3",
     "fs-extra": "^7.0.0",
     "minimist": "^1.2.0",
     "node-fetch": "^2.2.0",
@@ -31,6 +31,6 @@
     "@types/sha256": "^0.2.0",
     "copyfiles": "^2.1.0",
     "tslint": "^5.11.0",
-    "typescript": "^3.1.1"
+    "typescript": "^3.1.3"
   }
 }

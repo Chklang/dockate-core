@@ -2,6 +2,7 @@ import { IGlobalDB, IWebService, IService, INodeWithServices, Configuration } fr
 import { ILogger, LoggerFactory } from '@log4js-universal/logger';
 import { Dictionnary } from 'arrayplus';
 import { DockerAPI, IServiceInfos } from './get-docker-infos';
+import { IServiceConstraint } from '@dockate/commons/lib/i-service-constraint';
 
 export class Scheduler {
     private static LOGGER: ILogger = LoggerFactory.getLogger("dockate-core.Scheduler");
@@ -37,6 +38,102 @@ export class Scheduler {
         });
     }
 
+    private objHasSomeKeys<T>(obj: T, test: RegExp | ((o: string | number) => boolean)): boolean {
+        if (test instanceof RegExp) {
+            for (let key in obj) {
+                if (test.test(key)) {
+                    return true;
+                }
+            }
+        } else {
+            for (let key in obj) {
+                if ((test as (o: string | number) => boolean)(key)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private extractDockateKeys(serviceName: string, labels: {[key: string]: string}): IServiceConstraint[] {
+        const results: IDockateKeys = {
+            constraintsByLevel: Dictionnary.create(),
+            rootConstraints: null
+        };
+        for (let key in labels) {
+            const parser = /^dockate\.([0-9]+\.)?((?:port)|(?:domains)|(?:paths)|(?:authents)$)/.exec(key);
+            if (!parser) {
+                continue;
+            }
+            let constraints: IServiceConstraint = null;
+            if (parser[1] === undefined) {
+                constraints = results.rootConstraints;
+                if (!constraints) {
+                    constraints = {
+                        authents: null,
+                        domains: null,
+                        port: null,
+                        order: null,
+                        paths: null
+                    };
+                    results.rootConstraints = constraints;
+                }
+            } else {
+                const level: number = Number(parser[1]);
+                constraints = results.constraintsByLevel.getElement(level);
+                if (!constraints) {
+                    constraints = {
+                        authents: null,
+                        domains: null,
+                        port: null,
+                        order: level,
+                        paths: null
+                    };
+                    results.constraintsByLevel.addElement(level, constraints);
+                }
+            }
+            switch (parser[2]) {
+                case 'port':
+                    constraints.port = Number(labels[key]);
+                    break;
+                case 'domains':
+                    constraints.domains = labels[key].split(',');
+                    break;
+                case 'paths':
+                    constraints.paths = labels[key].split(',');
+                    break;
+                case 'authents':
+                    constraints.authents = labels[key].split(',');
+                    break;
+            }
+        }
+        const constraintsToRemove: IServiceConstraint[] = [];
+        results.constraintsByLevel.forEach((constraints) => {
+            if (constraints.port === null && results.rootConstraints) {
+                constraints.port = results.rootConstraints.port;
+            }
+            if (constraints.port === null) {
+                // Ignore this constraint
+                Scheduler.LOGGER.warn('Service %1 : Constraint %2 ignored because no port given', serviceName, constraints.order);
+                constraintsToRemove.push(constraints);
+                return;
+            }
+            if (constraints.authents === null && results.rootConstraints) {
+                constraints.authents = results.rootConstraints.authents;
+            }
+            if (constraints.domains === null && results.rootConstraints) {
+                constraints.domains = results.rootConstraints.domains;
+            }
+            if (constraints.paths === null && results.rootConstraints) {
+                constraints.paths = results.rootConstraints.paths;
+            }
+        });
+        if (constraintsToRemove.length > 0) {
+            constraintsToRemove.forEach(p => results.constraintsByLevel.removeElement(p.order));
+        }
+        return results.constraintsByLevel;
+    }
+
     private configMustBeRecalculed(): Promise<boolean> {
         if (this.lastDbCalculed === null) {
             Scheduler.LOGGER.debug("UPDATE > because no this.lastDbCalculed");
@@ -45,7 +142,7 @@ export class Scheduler {
         return this.api.getServices().then((services) => {
             let servicesFound: number = 0;
             const hasSomeServicesDifferents: boolean = services.some((service) => {
-                if (!service.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']) {
+                if (!this.objHasSomeKeys(service.Spec.TaskTemplate.ContainerSpec.Labels, /^dockate\.(?:[0-9]+\.)?port$/)) {
                     Scheduler.LOGGER.debug("Ignore service %1 because no dockate.port detected on labels", service.Spec.Name);
                     // Ignore this service
                     return false;
@@ -124,50 +221,49 @@ export class Scheduler {
                             let service: IService = servicesAll.getElement(serviceFromDB.Spec.Name);
                             if (!service) {
                                 service = {
-                                    NAME: serviceFromDB.Spec.Name,
-                                    PORT: {},
-                                    domains: [],
-                                    paths: [],
-                                    authent: [],
+                                    name: serviceFromDB.Spec.Name,
+                                    ports: {},
+                                    constraints: [],
                                     nodes: [],
-                                    virtualIPs: Dictionnary.create()
+                                    virtualIPs: Dictionnary.create<string, string>()
                                 };
+                                const allConstraints = this.extractDockateKeys(service.name, serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels);
+                                if (allConstraints.length === 0) {
+                                    //No information in service deployement
+                                    Scheduler.LOGGER.warn('Service %1 ignored because no constraints detected', service.name);
+                                    service = null;
+                                } else {
+                                    let hasSomePorts: boolean = false;
+                                    allConstraints.forEach((constraints) => {
+                                        const internalPortNumber: number = constraints.port;
+                                        const externalPort = serviceFromDB.Endpoint.Ports.find((entry) => {
+                                            if (entry.TargetPort === internalPortNumber) {
+                                                return true;
+                                            }
+                                            return false;
+                                        });
+                                        if (externalPort) {
+                                            hasSomePorts = true;
+                                            service.constraints.push(constraints);
+                                            service.ports[internalPortNumber] = externalPort.PublishedPort;
+                                        } else {
+                                            Scheduler.LOGGER.warn('Service %1 : Constraint %2 ignored because no external mapping found for port %3', service.name, constraints.order, internalPortNumber);
+                                        }
+                                    });
+                                    if (!hasSomePorts) {
+                                        Scheduler.LOGGER.warn('Service %1 ignored because no ports configured', service.name);
+                                        service = null;
+                                    }
+                                }
+                                if (service) {
+                                    service.constraints.sort((a, b) => {
+                                        return a.order - b.order;
+                                    });
+                                    servicesAll.addElement(serviceFromDB.Spec.Name, service);
+                                }
                                 serviceFromDB.Endpoint.VirtualIPs.forEach((virtualIp) => {
                                     service.virtualIPs.addElement(virtualIp.Addr, virtualIp.Addr);
                                 });
-                                if (serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']) {
-                                    const internalPortNumber: number = Number(serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockate.port']);
-                                    const externalPort = serviceFromDB.Endpoint.Ports.find((entry) => {
-                                        if (entry.TargetPort === internalPortNumber) {
-                                            return true;
-                                        }
-                                        return false;
-                                    });
-                                    if (externalPort) {
-                                        service.PORT[internalPortNumber] = externalPort.PublishedPort;
-                                        servicesAll.addElement(serviceFromDB.Spec.Name, service);
-                                        const domainsString: string = serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockate.domains'];
-                                        if (domainsString) {
-                                            service.domains = domainsString.split(',');
-                                            Scheduler.LOGGER.debug("Service %1 has the domain list %2", serviceFromDB.Spec.Name, service.domains);
-                                        }
-                                        const pathsString: string = serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockage.paths'];
-                                        if (pathsString) {
-                                            service.paths = pathsString.split(',');
-                                            Scheduler.LOGGER.debug("Service %1 has the paths list %2", serviceFromDB.Spec.Name, service.paths);
-                                        }
-                                        const authentString: string = serviceFromDB.Spec.TaskTemplate.ContainerSpec.Labels['dockage.authents'];
-                                        if (authentString) {
-                                            service.authent = authentString.split(',');
-                                            Scheduler.LOGGER.debug("Service %1 has the authent list %2", serviceFromDB.Spec.Name, service.authent);
-                                        }
-                                    } else {
-                                        Scheduler.LOGGER.debug("Service %1 ignored because no external port found", serviceFromDB.Spec.Name);
-                                        service = null;
-                                    }
-                                } else {
-                                    service = null;
-                                }
                             }
                             if (service) {
                                 service.nodes.push(nodeWithService);
@@ -190,4 +286,9 @@ export class Scheduler {
             });
         });
     }
+}
+
+interface IDockateKeys {
+    rootConstraints: IServiceConstraint;
+    constraintsByLevel: Dictionnary<number, IServiceConstraint>;
 }
