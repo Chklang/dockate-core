@@ -260,10 +260,10 @@ export class Scheduler {
                                         return a.order - b.order;
                                     });
                                     servicesAll.addElement(serviceFromDB.Spec.Name, service);
+                                    serviceFromDB.Endpoint.VirtualIPs.forEach((virtualIp) => {
+                                        service.virtualIPs.addElement(virtualIp.Addr, virtualIp.Addr);
+                                    });
                                 }
-                                serviceFromDB.Endpoint.VirtualIPs.forEach((virtualIp) => {
-                                    service.virtualIPs.addElement(virtualIp.Addr, virtualIp.Addr);
-                                });
                             }
                             if (service) {
                                 service.nodes.push(nodeWithService);
